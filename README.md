@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-0.115+-teal?logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  <img src="https://img.shields.io/badge/Status-Active-success.svg" />
+</p>
+
+<h1 align="center">AI Sidecar Panel</h1>
+
+<p align="center">
+  <strong>Predictive Monitoring Dashboard for Industrial & Data Center Systems</strong><br />
+  <em>Engineered to detect anomalies, learn from data, and visualize performance in real time.</em>
+</p>
+
+---
+
 # AI Sidecar Panel
 
 **FastAPI-based predictive monitoring dashboard** for industrial and data center applications.  
