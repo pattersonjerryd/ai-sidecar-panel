@@ -87,6 +87,31 @@ Then open:
 
 ---
 
+## 📡 API Endpoints
+
+| Endpoint | Method | Description |
+|-----------|--------|-------------|
+| `/health` | GET | Returns app health and uptime status |
+| `/predictive/series` | GET | Fetches real-time and projected data for a sensor |
+| `/alerts` | GET | Retrieves latest anomaly alerts for given sensor ID |
+| `/predictive/ingest` | POST | Adds synthetic or live sensor data samples |
+
+**Example:**
+```bash
+GET /predictive/series?sensor_id=ai_test&window_s=600&alpha=0.3&future_steps=30
+```
+
+**Response:**
+```json
+{
+  "sensor_id": "ai_test",
+  "predictions": [...],
+  "anomalies": [...]
+}
+```
+
+---
+
 ## 🧠 Roadmap
 - [ ] Add WebSocket real-time updates  
 - [ ] Integrate MQTT live sensor feeds  
