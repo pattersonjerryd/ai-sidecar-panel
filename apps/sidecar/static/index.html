@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sidecar • AI Predictive Overlay</title>
+
+  <!-- Chart.js + time adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+<header class="row">
+  <h1>Sidecar • AI Predictive Overlay</h1>
+  <span style="opacity:.65">EWMA baseline • projection • anomaly flags</span>
+  <span id="status" class="status">idle</span>
+</header>
+
+<main>
+  <div class="controls">
+    <label>Sensor ID
+      <input id="sensorId" value="ai_test"/>
+    </label>
+    <label>Window (seconds)
+      <input id="windowSec" type="number" value="600" min="15" max="86400"/>
+    </label>
+    <label>Alpha (0–1)
+      <input id="alpha" type="number" step="0.01" min="0.05" max="0.95" value="0.3"/>
+    </label>
+    <label>Future steps
+      <input id="futureSteps" type="number" value="30" min="0" max="600"/>
+    </label>
+    <button id="applyBtn">Apply</button>
+    <button id="nudgeBtn">Nudge +1</button>
+  </div>
+
+  <!-- Chart panel -->
+  <section class="chart-container">
+    <canvas id="chart"></canvas>
+  </section>
+
+  <!-- Recent Alerts panel -->
+  <section class="alerts-panel">
+    <h2>Recent Alerts</h2>
+    <table id="alertsTable">
+      <thead>
+      <tr><th>Time</th><th>Value</th><th>Z-Score</th><th>Message</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+
+// Chart setup
+const ctx = $('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    datasets: [
+      { label: 'Actual',     data: [], borderColor: '#4BA3FA', borderWidth: 2, pointRadius: 0, tension: 0.25 },
+      { label: 'Prediction', data: [], borderColor: '#FFB347', borderDash: [6,4], borderWidth: 1, pointRadius: 0, tension: 0.25 },
+      { label: 'Future',     data: [], borderColor: '#F9E26B', borderDash: [3,6], borderWidth: 1, pointRadius: 0, tension: 0.25 },
+      { label: 'Anomaly',    data: [], type: 'scatter', backgroundColor: '#D72638', pointRadius: 4, showLine: false }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'nearest', intersect: false },
+    scales: {
+      x: { type: 'time', position: 'bottom', grid: { color: '#333' }, ticks: { color: '#aaa' } },
+      y: { grid: { color: '#333' }, ticks: { color: '#aaa' } }
+    },
+    plugins: { legend: { labels: { color: '#ddd' } } }
+  }
+});
+
+// Map backend schema → Chart.js points
+function toPoints(tsArr, valsArr) {
+  const out = [];
+  const n = Math.min(tsArr.length, valsArr.length);
+  for (let i = 0; i < n; i++) out.push({ x: tsArr[i] * 1000, y: valsArr[i] });
+  return out;
+}
+
+async function fetchSeries() {
+  const sensor = $('sensorId').value;
+  const windowSec = Number($('windowSec').value);
+  const alpha = Number($('alpha').value);
+  const steps = Number($('futureSteps').value);
+
+  try {
+    const res = await fetch(`/predictive/series?sensor_id=${encodeURIComponent(sensor)}&window_s=${windowSec}&alpha=${alpha}&future_steps=${steps}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+
+    // j has: ts, vals, preds, anomalies_idx, future_ts, future_preds
+    const actual  = toPoints(j.ts, j.vals);
+    const pred    = toPoints(j.ts, j.preds);
+    const future  = toPoints(j.future_ts, j.future_preds);
+    const anomalies = (j.anomalies_idx || []).map(i => ({ x: j.ts[i] * 1000, y: j.vals[i] }));
+
+    chart.data.datasets[0].data = actual;
+    chart.data.datasets[1].data = pred;
+    chart.data.datasets[2].data = future;
+    chart.data.datasets[3].data = anomalies;
+
+    // Auto-scroll the x-axis over the last `windowSec`
+    const now = Date.now();
+    chart.options.scales.x.min = new Date(now - windowSec * 1000);
+    chart.options.scales.x.max = new Date(now + 10_000);
+
+    // Nice Y range based on current data
+    const ys = actual.map(p => p.y);
+    if (ys.length) {
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const pad = (maxY - minY) * 0.1 + 1e-6;
+      chart.options.scales.y.suggestedMin = minY - pad;
+      chart.options.scales.y.suggestedMax = maxY + pad;
+    }
+
+    chart.update('none');
+    statusEl.textContent = 'ok';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'error';
+  }
+}
+
+// Alerts table
+async function loadAlerts() {
+  try {
+    const res = await fetch(`/alerts?sensor_id=${encodeURIComponent($('sensorId').value)}&limit=10`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const tbody = document.querySelector('#alertsTable tbody');
+    tbody.innerHTML = '';
+    (data.items || []).forEach(a => {
+      const tr = document.createElement('tr');
+      const dt = new Date(a.t * 1000).toLocaleTimeString();
+      tr.innerHTML = `<td>${dt}</td><td>${a.v.toFixed(2)}</td><td>${a.z.toFixed(2)}</td><td>${a.msg ?? ''}</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {}
+}
+
+// Buttons
+$('applyBtn').addEventListener('click', fetchSeries);
+$('nudgeBtn').addEventListener('click', async () => {
+  // optional: call ingest endpoint to add a small value
+  const now = Date.now() / 1000;
+  await fetch('/predictive/ingest?sensor_id=' + encodeURIComponent($('sensorId').value) + '&v=5&t=' + now, { method: 'POST' });
+  fetchSeries();
+});
+
+// Polling
+setInterval(fetchSeries, 1500);
+setInterval(loadAlerts, 5000);
+fetchSeries();
+loadAlerts();
+</script>
+</body>
+</html>
