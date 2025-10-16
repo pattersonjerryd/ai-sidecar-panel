@@ -1,172 +1,239 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sidecar • AI Predictive Overlay</title>
-
-  <!-- Chart.js + time adapter -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="/static/css/style.css"/>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<header class="row">
-  <h1>Sidecar • AI Predictive Overlay</h1>
-  <span style="opacity:.65">EWMA baseline • projection • anomaly flags</span>
-  <span id="status" class="status">idle</span>
-</header>
+  <header class="row">
+    <div>
+      <h1>Sidecar • AI Predictive Overlay</h1>
+      <span class="sub">EWMA baseline • projection • anomaly flags</span>
+    </div>
+    <div class="right">
+      <button id="themeBtn" title="Toggle theme">Dark mode</button>
+      <span class="status" id="status">ok</span>
+    </div>
+  </header>
 
-<main>
-  <div class="controls">
-    <label>Sensor ID
-      <input id="sensorId" value="ai_test"/>
-    </label>
-    <label>Window (seconds)
-      <input id="windowSec" type="number" value="600" min="15" max="86400"/>
-    </label>
-    <label>Alpha (0–1)
-      <input id="alpha" type="number" step="0.01" min="0.05" max="0.95" value="0.3"/>
-    </label>
-    <label>Future steps
-      <input id="futureSteps" type="number" value="30" min="0" max="600"/>
-    </label>
-    <button id="applyBtn">Apply</button>
-    <button id="nudgeBtn">Nudge +1</button>
-  </div>
+  <main>
+    <section class="controls">
+      <label>Sensor ID
+        <input type="text" id="sensorId" value="ai_test" />
+      </label>
+      <label>Window (seconds)
+        <input type="number" id="window" value="600" min="15" />
+      </label>
+      <label>Alpha (0–1)
+        <input type="number" id="alpha" value="0.3" min="0.01" max="0.95" step="0.01" />
+      </label>
+      <label>Future steps
+        <input type="number" id="futureSteps" value="30" min="0" />
+      </label>
+      <div>
+        <button id="applyBtn" class="primary">Apply</button>
+        <button id="nudgeBtn">Nudge +1</button>
+      </div>
+    </section>
 
-  <!-- Chart panel -->
-  <section class="chart-container">
-    <canvas id="chart"></canvas>
-  </section>
+    <div class="card">
+      <div class="legend">
+        <span><span class="dot actual"></span>Actual</span>
+        <span><span class="dot pred"></span>Prediction</span>
+        <span><span class="dot future"></span>Future</span>
+        <span><span class="dot anom"></span>Anomaly</span>
+      </div>
+      <div class="chart-surface">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
 
-  <!-- Recent Alerts panel -->
-  <section class="alerts-panel">
-    <h2>Recent Alerts</h2>
-    <table id="alertsTable">
-      <thead>
-      <tr><th>Time</th><th>Value</th><th>Z-Score</th><th>Message</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
-</main>
+    <div class="table">
+      <h3 style="padding:14px 16px 4px;">Recent Alerts</h3>
+      <table id="alertsTable">
+        <thead>
+          <tr><th>Time</th><th>Value</th><th>Z-Score</th><th>Message</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
-<script>
-const $ = id => document.getElementById(id);
-const statusEl = $('status');
+    <div class="footer-space"></div>
+  </main>
 
-// Chart setup
-const ctx = $('chart').getContext('2d');
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    datasets: [
-      { label: 'Actual',     data: [], borderColor: '#4BA3FA', borderWidth: 2, pointRadius: 0, tension: 0.25 },
-      { label: 'Prediction', data: [], borderColor: '#FFB347', borderDash: [6,4], borderWidth: 1, pointRadius: 0, tension: 0.25 },
-      { label: 'Future',     data: [], borderColor: '#F9E26B', borderDash: [3,6], borderWidth: 1, pointRadius: 0, tension: 0.25 },
-      { label: 'Anomaly',    data: [], type: 'scatter', backgroundColor: '#D72638', pointRadius: 4, showLine: false }
-    ]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false,
-    interaction: { mode: 'nearest', intersect: false },
-    scales: {
-      x: { type: 'time', position: 'bottom', grid: { color: '#333' }, ticks: { color: '#aaa' } },
-      y: { grid: { color: '#333' }, ticks: { color: '#aaa' } }
-    },
-    plugins: { legend: { labels: { color: '#ddd' } } }
-  }
-});
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('Sidecar UI boot');
+    window.addEventListener('error', e => console.error('Global error:', e.message));
 
-// Map backend schema → Chart.js points
-function toPoints(tsArr, valsArr) {
-  const out = [];
-  const n = Math.min(tsArr.length, valsArr.length);
-  for (let i = 0; i < n; i++) out.push({ x: tsArr[i] * 1000, y: valsArr[i] });
-  return out;
-}
-
-async function fetchSeries() {
-  const sensor = $('sensorId').value;
-  const windowSec = Number($('windowSec').value);
-  const alpha = Number($('alpha').value);
-  const steps = Number($('futureSteps').value);
-
-  try {
-    const res = await fetch(`/predictive/series?sensor_id=${encodeURIComponent(sensor)}&window_s=${windowSec}&alpha=${alpha}&future_steps=${steps}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const j = await res.json();
-
-    // j has: ts, vals, preds, anomalies_idx, future_ts, future_preds
-    const actual  = toPoints(j.ts, j.vals);
-    const pred    = toPoints(j.ts, j.preds);
-    const future  = toPoints(j.future_ts, j.future_preds);
-    const anomalies = (j.anomalies_idx || []).map(i => ({ x: j.ts[i] * 1000, y: j.vals[i] }));
-
-    chart.data.datasets[0].data = actual;
-    chart.data.datasets[1].data = pred;
-    chart.data.datasets[2].data = future;
-    chart.data.datasets[3].data = anomalies;
-
-    // Auto-scroll the x-axis over the last `windowSec`
-    const now = Date.now();
-    chart.options.scales.x.min = new Date(now - windowSec * 1000);
-    chart.options.scales.x.max = new Date(now + 10_000);
-
-    // Nice Y range based on current data
-    const ys = actual.map(p => p.y);
-    if (ys.length) {
-      const minY = Math.min(...ys);
-      const maxY = Math.max(...ys);
-      const pad = (maxY - minY) * 0.1 + 1e-6;
-      chart.options.scales.y.suggestedMin = minY - pad;
-      chart.options.scales.y.suggestedMax = maxY + pad;
+    // ---------- CSS var helpers ----------
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function chartTheme() {
+      return {
+        actual: cssVar('--chart-actual') || '#42a5f5',
+        pred:   cssVar('--chart-pred')   || '#fdd835',
+        future: cssVar('--chart-future') || '#4fc3f7',
+        anom:   cssVar('--chart-anom')   || '#ef5350',
+        grid:   cssVar('--grid')         || 'rgba(255,255,255,0.1)',
+        text:   cssVar('--text-dim')     || '#a6a9b5'
+      };
     }
 
-    chart.update('none');
-    statusEl.textContent = 'ok';
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = 'error';
-  }
-}
-
-// Alerts table
-async function loadAlerts() {
-  try {
-    const res = await fetch(`/alerts?sensor_id=${encodeURIComponent($('sensorId').value)}&limit=10`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const tbody = document.querySelector('#alertsTable tbody');
-    tbody.innerHTML = '';
-    (data.items || []).forEach(a => {
-      const tr = document.createElement('tr');
-      const dt = new Date(a.t * 1000).toLocaleTimeString();
-      tr.innerHTML = `<td>${dt}</td><td>${a.v.toFixed(2)}</td><td>${a.z.toFixed(2)}</td><td>${a.msg ?? ''}</td>`;
-      tbody.appendChild(tr);
+    // ---------- Chart setup ----------
+    const statusEl = document.getElementById('status');
+    const ctx = document.getElementById('chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: '#999' }, grid: { color: '#333' } },
+          y: { ticks: { color: '#999' }, grid: { color: '#333' } }
+        },
+        plugins: { legend: { display: false } },
+        elements: { point: { radius: 0 } }
+      }
     });
-  } catch (e) {}
-}
 
-// Buttons
-$('applyBtn').addEventListener('click', fetchSeries);
-$('nudgeBtn').addEventListener('click', async () => {
-  // optional: call ingest endpoint to add a small value
-  const now = Date.now() / 1000;
-  await fetch('/predictive/ingest?sensor_id=' + encodeURIComponent($('sensorId').value) + '&v=5&t=' + now, { method: 'POST' });
-  fetchSeries();
-});
+    function applyThemeToChart() {
+      const c = chartTheme();
+      chart.options.scales.x.ticks.color = c.text;
+      chart.options.scales.y.ticks.color = c.text;
+      chart.options.scales.x.grid.color  = c.grid;
+      chart.options.scales.y.grid.color  = c.grid;
+      if (chart.data.datasets.length) {
+        const [dActual, dPred, dFuture, dAnom] = chart.data.datasets;
+        if (dActual) dActual.borderColor = c.actual;
+        if (dPred)   dPred.borderColor   = c.pred;
+        if (dFuture) dFuture.borderColor = c.future;
+        if (dAnom)   dAnom.borderColor   = c.anom;
+      }
+      chart.update('none');
+    }
 
-// Polling
-setInterval(fetchSeries, 1500);
-setInterval(loadAlerts, 5000);
-fetchSeries();
-loadAlerts();
-</script>
+    // ---------- Theme toggle ----------
+    (function () {
+      const KEY = 'ai_sidecar_theme';
+      const root = document.documentElement;
+      const btn  = document.getElementById('themeBtn');
+
+      function current() {
+        const attr = root.getAttribute('data-theme');
+        if (attr === 'dark' || attr === 'light') return attr;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      function setTheme(t) {
+        root.setAttribute('data-theme', t);
+        localStorage.setItem(KEY, t);
+        btn.textContent = (t === 'dark') ? 'Light mode' : 'Dark mode';
+        applyThemeToChart();
+      }
+      const saved = localStorage.getItem(KEY);
+      setTheme(saved === 'dark' || saved === 'light' ? saved : current());
+      btn.addEventListener('click', () => setTheme(current() === 'dark' ? 'light' : 'dark'));
+    })();
+
+    // ---------- Payload normalization ----------
+    function normalizeSeries(p) {
+      const ts           = p.ts || p.timestamps || p.t || [];
+      const vals         = p.vals || p.values || p.actual || [];
+      const preds        = p.preds || p.predictions || p.predicted || [];
+      const future_ts    = p.future_ts || (p.future && p.future.ts) || p.futureTs || [];
+      const future_preds = p.future_preds || (p.future && p.future.values) || p.future || [];
+      const an_idx       = p.anomalies_idx || p.anomaliesIndex || p.anomaly_idx || [];
+      return { ts, vals, preds, future_ts, future_preds, an_idx };
+    }
+
+    function updateChartFromPayload(payload) {
+      const { ts, vals, preds, future_ts, future_preds, an_idx } = normalizeSeries(payload);
+
+      const allTs  = (ts || []).concat(future_ts || []);
+      const labels = allTs.map(t => new Date(t * 1000).toLocaleTimeString());
+      const nPast  = ts.length, nFuture = future_ts.length;
+
+      const actual = (vals || []).concat(Array(nFuture).fill(null));
+      const pred   = (preds || []).concat(Array(nFuture).fill(null));
+      const future = Array(nPast).fill(null).concat(future_preds || []);
+
+      const anomalies = Array(nPast + nFuture).fill(null);
+      (an_idx || []).forEach(i => { if (i >= 0 && i < vals.length) anomalies[i] = vals[i]; });
+
+      const c = chartTheme();
+      chart.data.labels = labels;
+      chart.data.datasets = [
+        { label: 'Actual',     data: actual,  borderColor: c.actual, tension: 0.2 },
+        { label: 'Prediction', data: pred,    borderColor: c.pred,   borderDash: [4,4], tension: 0.2 },
+        { label: 'Future',     data: future,  borderColor: c.future, borderDash: [2,4], tension: 0.2 },
+        { label: 'Anomaly',    data: anomalies, borderColor: c.anom, showLine: false,
+          pointRadius: 3, pointHoverRadius: 4, pointStyle: 'circle' }
+      ];
+      chart.update('none');
+    }
+
+    // ---------- Fetchers ----------
+    async function fetchSeries() {
+      try {
+        const sensor = document.getElementById('sensorId').value;
+        const win    = document.getElementById('window').value;
+        const alpha  = document.getElementById('alpha').value;
+        const future = document.getElementById('futureSteps').value;
+        const url    = `/predictive/series?sensor_id=${encodeURIComponent(sensor)}&window_s=${win}&alpha=${alpha}&future_steps=${future}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        updateChartFromPayload(data);
+        statusEl.textContent = 'ok';
+        statusEl.classList.remove('err');
+      } catch (err) {
+        console.error('fetchSeries error', err);
+        statusEl.textContent = 'error';
+        statusEl.classList.add('err');
+      }
+    }
+
+    async function loadAlerts() {
+      try {
+        const sensor = document.getElementById('sensorId').value;
+        const res = await fetch(`/alerts?sensor_id=${encodeURIComponent(sensor)}&limit=10`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const tbody = document.querySelector('#alertsTable tbody');
+        tbody.innerHTML = '';
+        (data.items || []).forEach(a => {
+          const tr = document.createElement('tr');
+          const t = new Date(a.t * 1000).toLocaleTimeString();
+          tr.innerHTML = `<td>${t}</td><td>${a.v.toFixed(2)}</td><td>${a.z.toFixed(2)}</td><td>${a.msg}</td>`;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error('loadAlerts error', e);
+      }
+    }
+
+    // ---------- Buttons ----------
+    document.getElementById('applyBtn').addEventListener('click', fetchSeries);
+    document.getElementById('nudgeBtn').addEventListener('click', async () => {
+      try {
+        const sensor = document.getElementById('sensorId').value;
+        const now = Date.now() / 1000;
+        await fetch(`/predictive/ingest?sensor_id=${encodeURIComponent(sensor)}&v=${(Math.random()*10).toFixed(3)}&t=${now}`);
+        fetchSeries();
+      } catch (_) {}
+    });
+
+    // ---------- Initial load + polling ----------
+    fetchSeries();
+    loadAlerts();
+    setInterval(fetchSeries, 5000);
+    setInterval(loadAlerts, 6000);
+  });
+  </script>
 </body>
 </html>

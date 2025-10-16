@@ -1,111 +1,226 @@
-/* === Grafana-ish Dark Dashboard Theme =============================== */
-/* Palette */
-:root{
-  --bg:#0b0e14;            /* page bg */
-  --bg-2:#0f131b;          /* panel bg (subtle gradient base) */
-  --bg-3:#0b0f17;          /* header bg */
-  --grid:#1c2430;          /* grid lines */
-  --border:#202837;        /* panel borders */
-  --text:#e7eaf0;          /* primary text */
-  --muted:#a3adbf;         /* secondary text */
-  --accent:#f2cc60;        /* accent (future line, highlights) */
-  --accent-2:#73b7f2;      /* actual line color hint */
-  --danger:#e24d42;        /* anomaly dots */
-  --ok:#2aa198;
-  --shadow:rgba(0,0,0,.45);
+/* ===========================================================
+   Theme system for AI Sidecar Panel
+   Light and Dark modes with smooth variable transitions
+   =========================================================== */
+
+/* === Default: Dark theme === */
+:root {
+  /* Surface layers */
+  --bg: #0b0f14;
+  --panel: #121821;
+  --panel-2: #1f2430;
+  --elev: rgba(255,255,255,0.04);
+
+  /* Text colors */
+  --text: #dbe7ff;
+  --text-dim: #9aa6bd;
+  --muted: #7b8798;
+
+  /* Accents */
+  --primary: #5aa9ff;
+  --primary-2: #2b7dff;
+  --ok: #16a34a;
+  --warn: #f59e0b;
+  --err: #f87171;
+  --grid: rgba(255,255,255,0.08);
+
+  /* Inputs & buttons */
+  --input-bg: #1c2330;
+  --input-border: #2b3344;
+  --btn-bg: #2a2f3d;
+  --btn-bg-hover: #3a4152;
+  --shadow: 0 8px 24px rgba(0,0,0,0.35);
+
+  /* Chart colors */
+  --chart-actual: #42a5f5;
+  --chart-pred:   #fdd835;
+  --chart-future: #4fc3f7;
+  --chart-anom:   #ef5350;
 }
 
-/* Global */
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;
-  color:var(--text);
-  background:
-    radial-gradient(1200px 600px at 20% -10%, rgba(255,255,255,.02) 0%, transparent 60%),
-    radial-gradient(900px 500px at 120% 120%, rgba(255,255,255,.03) 0%, transparent 60%),
-    var(--bg);
-  font:13px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+/* === Light theme override === */
+:root[data-theme="light"] {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --panel-2: #f0f2f7;
+  --elev: rgba(0,0,0,0.04);
+
+  --text: #30353f;
+  --text-dim: #5b6270;
+  --muted: #7a8593;
+
+  --primary: #2563eb;
+  --primary-2: #3b82f6;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
+  --grid: rgba(0,0,0,0.08);
+
+  --input-bg: #ffffff;
+  --input-border: #d4d7df;
+  --btn-bg: #e2e8f0;
+  --btn-bg-hover: #cbd5e1;
+  --shadow: 0 6px 20px rgba(0,0,0,0.12);
+
+  --chart-actual: #1e88e5;
+  --chart-pred:   #f9a825;
+  --chart-future: #039be5;
+  --chart-anom:   #d32f2f;
 }
 
-/* Header (sticky like Grafana) */
-header{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; gap:12px;
-  padding:10px 16px;
-  background:linear-gradient(180deg,var(--bg-3),#0a0d14 85%);
-  border-bottom:1px solid #131922;
-}
-h1{font-size:15px; margin:0; letter-spacing:.2px}
-.status{margin-left:auto; color:var(--muted); font-size:12px}
-
-/* Toolbar pills */
-.controls{
-  display:flex; gap:8px; flex-wrap:wrap; align-items:center;
-  margin:12px 0 14px;
-}
-.controls label{color:var(--muted); font-size:11px; display:grid; gap:4px}
-.controls input{
-  height:30px; min-width:120px;
-  border-radius:6px; border:1px solid #2a3446;
-  background:#121826; color:var(--text); padding:4px 8px;
-}
-.controls button{
-  height:30px; padding:0 12px; border-radius:6px;
-  background:#151c2b; color:var(--text);
-  border:1px solid #2a3446; cursor:pointer;
-}
-.controls button:hover{border-color:#3a4863}
-
-/* Grid (12-column responsive) */
-main{padding:14px 16px; max-width:1700px; margin:0 auto}
-.grid{
-  display:grid; grid-template-columns:repeat(12,1fr); gap:10px;
-}
-@media (max-width:1400px){ .grid{grid-template-columns:repeat(8,1fr)} }
-@media (max-width:900px) { .grid{grid-template-columns:repeat(4,1fr)} }
-
-/* Panel */
-.panel{
-  background:linear-gradient(180deg,var(--bg-2),#0d111a);
-  border:1px solid var(--border);
-  border-radius:8px;
-  box-shadow:0 8px 20px var(--shadow);
-  overflow:hidden; display:flex; flex-direction:column;
-}
-.panel--h240{height:240px}
-.panel--h300{height:300px}
-.panel--h380{height:380px}
-
-.panel__header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:8px 10px; border-bottom:1px solid #1a2230; color:var(--muted);
-  font-size:11px; letter-spacing:.2px; text-transform:uppercase;
-}
-.panel__body{flex:1; position:relative; padding:6px 8px}
-.panel__body canvas{width:100% !important; height:100% !important; display:block}
-
-/* Legend */
-.legend{
-  position:absolute; top:8px; right:10px;
-  background:rgba(10,14,22,.55); backdrop-filter:blur(2px);
-  border:1px solid #1b2331; border-radius:6px; padding:6px 8px;
-  display:flex; gap:10px; color:var(--muted); font-size:11px;
+/* === Global styles === */
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Stat tiles (optional quick metrics) */
-.stats{
-  display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:10px;
+/* === Header === */
+header.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--panel-2);
 }
-.stat{
-  background:linear-gradient(180deg,#111724,#0c111b);
-  border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+header h1 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text);
 }
-.stat__name{color:var(--muted); font-size:11px; text-transform:uppercase}
-.stat__val{font-size:22px; margin-top:4px}
+header .sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+header .right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.status {
+  font-size: 12px;
+  color: var(--ok);
+}
+.status.err {
+  color: var(--err);
+}
 
-/* Axis cosmetics for Chart.js */
-:root{
-  --tick:#aab3c5; --grid:#1e2635;
+/* === Controls section === */
+.controls {
+  background: var(--panel-2);
+  margin: 16px auto;
+  padding: 16px 18px;
+  border-radius: 10px;
+  width: clamp(300px, 90%, 800px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
 }
-.chartjs-render-monitor{outline:none}
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.controls input {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.controls button {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 8px 14px;
+  background: var(--btn-bg);
+  color: var(--text);
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+.controls button.primary {
+  background: var(--primary);
+  color: #fff;
+}
+.controls button:hover {
+  background: var(--btn-bg-hover);
+}
+
+/* === Card container === */
+.card {
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  width: clamp(300px, 90%, 800px);
+  margin: 10px auto;
+  padding: 12px 18px;
+}
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.legend .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+.legend .actual { background: var(--chart-actual); }
+.legend .pred { background: var(--chart-pred); }
+.legend .future { background: var(--chart-future); }
+.legend .anom { background: var(--chart-anom); }
+
+.chart-surface {
+  color: var(--grid);
+  padding: 8px 6px 12px;
+  height: 280px;
+}
+
+/* === Table === */
+.table {
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  width: clamp(300px, 90%, 800px);
+  margin: 20px auto;
+  overflow-x: auto;
+}
+.table h3 {
+  color: var(--text);
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th, .table td {
+  padding: 8px 12px;
+  text-align: left;
+}
+.table thead {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.table tbody tr:nth-child(odd) {
+  background: color-mix(in srgb, var(--panel) 80%, var(--bg));
+}
+.table tbody td {
+  color: var(--text-dim);
+}
+
+/* === Footer space === */
+.footer-space { height: 24px; }
