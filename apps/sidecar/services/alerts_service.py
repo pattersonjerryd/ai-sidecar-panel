@@ -1,39 +1,12 @@
 # apps/sidecar/services/alerts_service.py
 from __future__ import annotations
 from typing import List
-import numpy as np
 import time
 
 from apps.sidecar.repositories import buffers
 from apps.sidecar.repositories import alerts_repo
 from apps.sidecar.models.alerts import AlertEvent, AlertsResp
-
-# ---------- local helpers (mirror predictive math) -----------------
-
-def _ewma(y: np.ndarray, alpha: float) -> np.ndarray:
-    if y.size == 0:
-        return y
-    out = np.empty_like(y, dtype=float)
-    out[0] = y[0]
-    for i in range(1, y.size):
-        out[i] = alpha * y[i - 1] + (1 - alpha) * out[i - 1]
-    return out
-
-def _one_step(y: np.ndarray, alpha: float) -> np.ndarray:
-    if y.size == 0:
-        return y
-    base = _ewma(y, alpha)
-    preds = np.roll(base, 1)
-    preds[0] = base[0]
-    return preds
-
-def _z_scores(y: np.ndarray, preds: np.ndarray) -> np.ndarray:
-    if y.size < 2:
-        return np.zeros_like(y, dtype=float)
-    resid = y - preds
-    mu = float(resid.mean())
-    sd = float(resid.std() + 1e-9)
-    return (resid - mu) / sd
+from apps.sidecar.core.anomaly import run_predictions
 
 # ---------- public API ---------------------------------------------
 
@@ -49,19 +22,21 @@ def rebuild_alerts(sensor_id: str, *, window_s: int = 600, alpha: float = 0.3, z
     cutoff = time.time() - window_s
     win = [s for s in all_samples if s["t"] >= cutoff] or all_samples[-min(len(all_samples), 2):]
 
-    ts = np.array([s["t"] for s in win], dtype=float)
-    y  = np.array([s["v"] for s in win], dtype=float)
+    ts = [s["t"] for s in win]
+    vals = [s["v"] for s in win]
 
-    preds = _one_step(y, alpha)
-    z = _z_scores(y, preds)
+    # Use shared anomaly detection logic
+    preds, _fts, _fp, anomalies_idx, z = run_predictions(
+        ts, vals, window_s=window_s, alpha=alpha, future_steps=0
+    )
 
     items: List[AlertEvent] = []
-    for i in range(z.size):
-        if abs(z[i]) >= z_thresh:
+    for i in anomalies_idx:
+        if i < len(ts) and i < len(vals) and i < len(z):
             items.append(AlertEvent(
                 sensor_id=sensor_id,
                 t=float(ts[i]),
-                v=float(y[i]),
+                v=float(vals[i]),
                 z=float(z[i]),
                 msg=f"Anomaly z={z[i]:.2f} at t={ts[i]:.0f}"
             ))

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apps.sidecar.api.health import router as health_router
 from apps.sidecar.api.predictive import router as predictive_router
 from apps.sidecar.api.alerts import router as alerts_router
+from apps.sidecar.api.ingest import router as ingest_router
 
 # Simulator (import concrete function directly)
 from apps.sidecar.workers.simulator import start as start_simulator
@@ -54,6 +55,7 @@ def index() -> HTMLResponse:
 app.include_router(health_router)       # /health
 app.include_router(predictive_router)   # /predictive/series, /predictive/ingest
 app.include_router(alerts_router)       # /alerts
+app.include_router(ingest_router)       # /ingest
 
 # Backgrounds (simulator)
 @app.on_event("startup")
